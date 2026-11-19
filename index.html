@@ -67,6 +67,7 @@ button:disabled{opacity:.45}
   const origem = p.get('o') || '';
   const sess = p.get('s') || '';
   const retorno = p.get('r') || '';
+  const modoProduto = p.get('m') === 'p'; // leitura do código de barras do PRODUTO
   const origemValida = ORIGEM_APP.test(origem);
   const retornoValido = /^https:\/\/script\.google\.com\/(a\/macros\/[^/]+|macros)\/s\/[\w-]+\/(exec|dev)$/.test(retorno);
 
@@ -96,7 +97,7 @@ button:disabled{opacity:.45}
       const cap = track.getCapabilities ? track.getCapabilities() : {};
       $('btnLanterna').disabled = !cap.torch;
       parado = false;
-      status('Aponte para o código de barras da etiqueta');
+      status(modoProduto ? 'Aponte para o código de barras do PRODUTO' : 'Aponte para o código de barras da etiqueta');
       ler();
     } catch (e) {
       pararCamera();
@@ -129,6 +130,14 @@ button:disabled{opacity:.45}
     parado = true;
     if (navigator.vibrate) navigator.vibrate(80);
     $('mira').classList.add('ok');
+    if (modoProduto) {
+      if (PADRAO_ENDERECO.test(valor)) { // leu a etiqueta do endereço por engano
+        parado = false; ultimo = ''; repeticoes = 0; $('mira').classList.remove('ok');
+        status('Essa é a etiqueta do ENDEREÇO. Aponte para o código do PRODUTO.');
+        timer = setTimeout(ler, 800); return;
+      }
+      enviar(valor); return;
+    }
     if (PADRAO_ENDERECO.test(valor)) { enviar(valor); return; }
     // Código fora do padrão de endereço (ex.: local especial ou código de produto): pede confirmação
     $('lido').innerHTML = 'Código lido (não tem formato de endereço):<b>' + esc(valor) + '</b>Confira se é a etiqueta certa.';
@@ -142,14 +151,14 @@ button:disabled{opacity:.45}
   function enviar(valor){
     finalizado = true;
     pararCamera();
-    $('lido').innerHTML = 'Endereço lido:<b>' + esc(valor) + '</b>';
+    $('lido').innerHTML = (modoProduto ? 'Produto lido:' : 'Endereço lido:') + '<b>' + esc(valor) + '</b>';
     $('lido').classList.add('mostrar');
     $('acoesLeitura').classList.add('oculto');
     $('acoesConfirmar').classList.add('oculto');
     let entregue = false;
     try {
       if (window.opener && !window.opener.closed) {
-        window.opener.postMessage({ tipo: 'inv-endereco', sess: sess, valor: valor }, origemValida ? origem : '*');
+        window.opener.postMessage({ tipo: modoProduto ? 'inv-produto' : 'inv-endereco', sess: sess, valor: valor }, origemValida ? origem : '*');
         entregue = true;
       }
     } catch (e) { entregue = false; }
@@ -162,6 +171,11 @@ button:disabled{opacity:.45}
     }
     // Plano B: a aba do inventário não está acessível (ex.: o Chrome cortou a ligação entre as abas).
     // Abre o app de novo já com o endereço (?end=...).
+    if (modoProduto) { // não reabre o app: perderia a contagem em andamento
+      status('Volte para a aba do inventário e bipe de novo');
+      $('lido').innerHTML += 'Não foi possível enviar o código para a aba do inventário.';
+      return;
+    }
     if (retornoValido) {
       const url = retorno + '?end=' + encodeURIComponent(valor);
       $('btnVoltar').href = url;
@@ -183,7 +197,7 @@ button:disabled{opacity:.45}
     $('lido').classList.remove('mostrar'); $('mira').classList.remove('ok');
     $('acoesConfirmar').classList.add('oculto'); $('acoesLeitura').classList.remove('oculto');
     ultimo = ''; repeticoes = 0; parado = false;
-    status('Aponte para o código de barras da etiqueta'); ler();
+    status(modoProduto ? 'Aponte para o código de barras do PRODUTO' : 'Aponte para o código de barras da etiqueta'); ler();
   };
   $('btnCancelar').onclick = () => { pararCamera(); window.close(); status('Leitura cancelada. Feche esta aba.'); };
   $('btnIniciar').onclick = iniciar;
